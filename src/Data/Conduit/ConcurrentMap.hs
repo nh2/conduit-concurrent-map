@@ -14,7 +14,7 @@ import           Control.Monad (when)
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.IO.Unlift (MonadUnliftIO, askRunInIO)
 import           Control.Monad.Trans (lift)
-import           Control.Monad.Trans.Resource (ResourceT)
+import           Control.Monad.Trans.Resource (MonadResource)
 import           Data.Conduit (ConduitT, await, bracketP)
 import qualified Data.Conduit as C
 import           Data.Foldable (for_)
@@ -110,7 +110,7 @@ seqHeadMaybe s = case Seq.viewl s of
 -- > puts :: (MonadIO m) => String -> m () -- for non-interleaved output
 -- > puts s = liftIO $ BS8.putStrLn (BS8.pack s)
 -- > runConduitRes (CL.sourceList [1..6] .| conduitconcurrentMapM_ 4 (\i -> liftIO $ puts (show i ++ " before") >> threadDelay (i * 1000000) >> puts (show i ++ " after") >> return (i*2)) .| CL.consume )
-concurrentMapM_ :: (MonadUnliftIO m) => Int -> Int -> (a -> m b) -> ConduitT a b (ResourceT m) ()
+concurrentMapM_ :: (MonadUnliftIO m, MonadResource m) => Int -> Int -> (a -> m b) -> ConduitT a b m ()
 concurrentMapM_ numThreads workerOutputBufferSize f = do
   when (workerOutputBufferSize < 1) $ do
     error $ "Data.Conduit.Concurrent.concurrentMapM_ requires workerOutputBufferSize < 1, got " ++ show workerOutputBufferSize
@@ -161,7 +161,7 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
   -- we can use it in conduit `bracketP`'s IO-based resource acquisition
   -- function (where we have to spawn our workers to guarantee they shut down
   -- when somebody async-kills the conduit).
-  runInIO :: (m b -> IO b) <- lift (lift askRunInIO) -- double lift brings us into `m`
+  runInIO :: (m b -> IO b) <- lift askRunInIO -- lift brings us into `m`
 
   -- `spawnWorkers` uses `async` and thus MUST be run with interrupts disabled
   -- (e.g. as initialisation function of `bracket`) to be async exception safe.
@@ -244,7 +244,7 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
       --      drain off all elements stored in output buffers,
       --      send all workers the stop signal and wait for their orderly termination.
 
-      let loop :: Int -> Int -> ConduitT a b (ResourceT m) ()
+      let loop :: Int -> Int -> ConduitT a b m ()
           loop numWorkersRampedUp numInQueue = do
 
             await >>= \case
@@ -296,7 +296,7 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
 --
 -- If `f` is IO-bound, you probably want to use `concurrentMapM_` with
 -- explicitly given amount of threads instead.
-concurrentMapM_numCaps :: (MonadUnliftIO m) => Int -> (a -> m b) -> ConduitT a b (ResourceT m) ()
+concurrentMapM_numCaps :: (MonadUnliftIO m, MonadResource m) => Int -> (a -> m b) -> ConduitT a b m ()
 concurrentMapM_numCaps workerOutputBufferSize f = do
   numCaps <- liftIO getNumCapabilities
   concurrentMapM_ numCaps workerOutputBufferSize f
