@@ -109,7 +109,7 @@ seqHeadMaybe s = case Seq.viewl s of
 --
 -- > puts :: (MonadIO m) => String -> m () -- for non-interleaved output
 -- > puts s = liftIO $ BS8.putStrLn (BS8.pack s)
--- > runConduitRes (CL.sourceList [1..6] .| conduitconcurrentMapM_ 4 (\i -> liftIO $ puts (show i ++ " before") >> threadDelay (i * 1000000) >> puts (show i ++ " after") >> return (i*2)) .| CL.consume )
+-- > runConduitRes (CL.sourceList [1..6] .| concurrentMapM_ 4 (\i -> liftIO $ puts (show i ++ " before") >> threadDelay (i * 1000000) >> puts (show i ++ " after") >> return (i*2)) .| CL.consume )
 concurrentMapM_ :: (MonadUnliftIO m, MonadResource m) => Int -> Int -> (a -> m b) -> ConduitT a b m ()
 concurrentMapM_ numThreads workerOutputBufferSize f = do
   when (workerOutputBufferSize < 1) $ do
