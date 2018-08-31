@@ -6,7 +6,7 @@ author:        Niklas Hambüchen <mail@nh2.me>
 maintainer:    Niklas Hambüchen <mail@nh2.me>
 category:      Data, Conduit
 build-type:    Simple
-tested-With:   GHC==8.4.3
+tested-with:   GHC==8.2.2, GHC==8.4.3
 cabal-version: >= 1.8
 homepage:      https://github.com/nh2/conduit-concurrent-map
 bug-Reports:   https://github.com/nh2/conduit-concurrent-map/issues
