@@ -9,6 +9,7 @@ Instead, it it provides one pipeline element that processes elements concurrentl
 ## Comparison to other libraries
 
 * [`conduit-algorithms`](https://hackage.haskell.org/package/conduit-algorithms)
-  * `Data.Conduit.Algorithms.Async`'s `asyncMapC` has similar semantics but [is not async exception safe](https://github.com/luispedro/conduit-algorithms/issues/9)
+  * `Data.Conduit.Algorithms.Async`'s `asyncMapC` is similar but only does pure maps (`a -> b`) instead of monadic maps (`a -> m b`)
+  * `Data.Conduit.Algorithms.Async`'s `asyncMapC` [is not async exception safe](https://github.com/luispedro/conduit-algorithms/issues/9)
 * [`stm-conduit`](http://hackage.haskell.org/package/stm-conduit)
   * Completely different goal: Connects multiple conduit components so that they run concurrently.
