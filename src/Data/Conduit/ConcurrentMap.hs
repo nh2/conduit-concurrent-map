@@ -62,7 +62,7 @@ seqHeadMaybe s = case Seq.viewl s of
 -- To cope with this, @concurrentMapM_ numThreads workerOutputBufferSize f@ gives each
 -- thread @workerOutputBufferSize@ output slots to store @b@s while they are blocked.
 --
--- Use the convenience `concurrentMapM_` when @f@ is CPU-bound.
+-- Use the convenience `concurrentMapM_numCaps` when @f@ is CPU-bound.
 --
 -- @workerOutputBufferSize@ must be given >= 1.
 --
