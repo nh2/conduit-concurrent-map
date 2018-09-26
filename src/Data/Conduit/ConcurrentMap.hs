@@ -67,7 +67,7 @@ seqHeadMaybe s = case Seq.viewl s of
 -- @workerOutputBufferSize@ must be given >= 1.
 --
 -- The @workerOutputBufferSize@ keeps the memory usage of the conduit bounded,
--- namely to @getNumCapabilities * (workerOutputBufferSize + 1)@ many @b@s at any
+-- namely to @numThreads * (workerOutputBufferSize + 1)@ many @b@s at any
 -- given time (the @+ 1@ is for the currently processing ones).
 --
 -- To achieve maximum parallelism/utilisation, you should choose
@@ -93,7 +93,7 @@ seqHeadMaybe s = case Seq.viewl s of
 --   the same order as their corresponding `a`s came in (the parallelism
 --   doesn't change the order).
 -- * Bounded memory: The conduit will only hold to
---   @getNumCapabilities * (workerOutputBufferSize + 1)@ as many @b@s.
+--   @numThreads * (workerOutputBufferSize + 1)@ as many @b@s.
 -- * Full utilisation: The conduit will try to keep all cores busy as much as
 --   it can. This means that it will always try to `await` if there's a free
 --   core, and will only `yield` once it has to to make a core free.
