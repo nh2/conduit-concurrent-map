@@ -45,7 +45,9 @@ seqHeadMaybe s = case Seq.viewl s of
   a :< _     -> Just a
 
 
--- | Concurrent, order-preserving conduit mapping function.
+-- | @concurrentMapM_ numThreads workerOutputBufferSize f@
+--
+-- Concurrent, order-preserving conduit mapping function.
 --
 -- Like `Data.Conduit.mapM`, but runs in parallel with the given number of threads,
 -- returns outputs in the order of inputs (like @mapM@, no reordering),
@@ -59,7 +61,7 @@ seqHeadMaybe s = case Seq.viewl s of
 -- Unless we buffer the queued result somewhere, the thread that finished the
 -- short-running computation is now blocked and sits idle (low utilisation).
 --
--- To cope with this, @concurrentMapM_ numThreads workerOutputBufferSize f@ gives each
+-- To cope with this, this function gives each
 -- thread @workerOutputBufferSize@ output slots to store @b@s while they are blocked.
 --
 -- Use the convenience `concurrentMapM_numCaps` when @f@ is CPU-bound.
