@@ -1,3 +1,8 @@
+0.1.2
+-----
+
+* Fix race condition hanging bug in drain phase.
+
 0.1.1
 -----
 
