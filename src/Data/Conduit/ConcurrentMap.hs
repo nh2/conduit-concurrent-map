@@ -315,8 +315,8 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
             await >>= \case
               Nothing -> do -- Drain phase: Upstream conduit is done, tell all workers to finish.
                 for_ [1..numWorkersRampedUp] $ \_ -> do
-                  putInVar Nothing
                   yieldQueueHead -- This will succeed due to the "Cruise phase invariant", see above.
+                  putInVar Nothing -- This will not block forever because we just freed an `outVar` in the line above.
                 for_ [1..(numThreads - numWorkersRampedUp)] $ \_ -> do -- need to quit workers that were never ramped up too
                   putInVar Nothing
                 let numInQueueAfterStopping = numInQueue - numWorkersRampedUp
