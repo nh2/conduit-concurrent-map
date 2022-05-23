@@ -12,7 +12,7 @@ module Data.Conduit.ConcurrentMap
 
 import           Control.Monad (when)
 import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.IO.Unlift (MonadUnliftIO, askRunInIO)
+import           Control.Monad.IO.Unlift (MonadUnliftIO, UnliftIO, unliftIO, askUnliftIO)
 import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.Resource (MonadResource)
 import           Data.Conduit (ConduitT, await, bracketP)
@@ -224,37 +224,41 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
   -- we can use it in conduit `bracketP`'s IO-based resource acquisition
   -- function (where we have to spawn our workers to guarantee they shut down
   -- when somebody async-kills the conduit).
-  runInIO :: (m b -> IO b) <- lift askRunInIO -- lift brings us into `m`
+  u :: UnliftIO m <- lift askUnliftIO -- `lift` here brings us into `m`
 
   -- `spawnWorkers` uses `async` and thus MUST be run with interrupts disabled
   -- (e.g. as initialisation function of `bracket`) to be async exception safe.
+  --
+  -- Note `async` does not unmask, but `unliftIO u` will restore the original
+  -- masking state (thus typically unmask).
   let spawnWorkers :: IO (Async ())
       spawnWorkers = do
         workersAsync <- async $ do -- see comment above for exception safety
-          forConcurrently_ [1..numThreads] $ \_ -> do
-            -- Each worker has `workerOutputBufferSize` many `workerOutVar`s
-            -- in a ring buffer; until the shutdown signal is received, a worker
-            -- loops to: grab an `a` from the `inVar`, pick its next `workerOutVar,
-            -- put it into the `outQueue`, signal that it has atomically done these
-            -- 2 actions, process `b <- f x`, and write the `b` to the `workerOutVar`.
-            workerOutVars <- V.replicateM workerOutputBufferSize newEmptyMVar
-            let loop :: Int -> IO ()
-                loop !i = do
+          unliftIO u $ liftIO $ do -- use `runInIO` to restore masking state
+            forConcurrently_ [1..numThreads] $ \_i_worker -> do
+              -- Each worker has `workerOutputBufferSize` many `workerOutVar`s
+              -- in a ring buffer; until the shutdown signal is received, a worker
+              -- loops to: grab an `a` from the `inVar`, pick its next `workerOutVar,
+              -- put it into the `outQueue`, signal that it has atomically done these
+              -- 2 actions, process `b <- f x`, and write the `b` to the `workerOutVar`.
+              workerOutVars <- V.replicateM workerOutputBufferSize newEmptyMVar
+              let loop :: Int -> IO ()
+                  loop !i_outVarSlot = do
 
-                  m'a <- takeMVar inVar
-                  case m'a of
-                    Nothing -> return () -- shutdown signal, worker quits
-                    Just a -> do
-                      let workerOutVar = workerOutVars ! i
-                      atomicModifyIORef_' outQueueRef (|> workerOutVar)
-                      signal inVarEnqueued
-                      -- Important: Force WHNF here so that f gets evaluated inside the
-                      -- worker; it's `f`'s job to decide whether to deepseq or not.
-                      !b <- runInIO (f a)
-                      putMVar workerOutVar b
-                      loop ((i + 1) `rem` workerOutputBufferSize)
+                    m'a <- takeMVar inVar
+                    case m'a of
+                      Nothing -> return () -- shutdown signal, worker quits
+                      Just a -> do
+                        let workerOutVar = workerOutVars ! i_outVarSlot
+                        atomicModifyIORef_' outQueueRef (|> workerOutVar)
+                        signal inVarEnqueued
+                        -- Important: Force WHNF here so that f gets evaluated inside the
+                        -- worker; it's `f`'s job to decide whether to deepseq or not.
+                        !b <- unliftIO u (f a)
+                        putMVar workerOutVar b
+                        loop ((i_outVarSlot + 1) `rem` workerOutputBufferSize)
 
-            loop 0
+              loop 0
 
         link workersAsync
 
