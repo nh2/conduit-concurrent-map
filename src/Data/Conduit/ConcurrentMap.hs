@@ -149,7 +149,68 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
   -- block on putting their `b`s in, so there are maximally
   -- `N * (workerOutputBufferSize + 1)` many `b`s held alive
   -- by this function.
-
+  --
+  -- Note that as per this "+ 1" logic, for each worker there may up to 1
+  -- `workerOutVar` that is in in the `outQueue` twice.
+  -- For example, for `numThreads = 2` and `workerOutputBufferSize = 2`,
+  -- we may have:
+  --
+  -- -------------------------  [ worker1OutVarSlotA  worker1OutVarSlotB ] <- f   \
+  -- outQueue of workerOutVars                                                     - inVar
+  -- -------------------------  [ worker2OutVarSlotA  worker2OutVarSlotB ] <- f   /
+  --
+  -- with an input conduit streaming elements
+  --     [A, B, C, D]
+  -- with processing times
+  --     [9, 0, 0, 0]
+  -- this may lead to an `outQueue` as follows:
+  --
+  --  +-----------------------------------+
+  --  |                                   |
+  --  V                                   |
+  -- -------------------------  [ worker1OutVarSlot_a  worker1OutVarSlot_a ] <- f   \
+  --  A  B  C                                                                        - inVar (containing element D)
+  -- -------------------------  [ worker2OutVarSlot_b  worker2OutVarSlot_b ] <- f   /
+  --     ^  ^                             |                    |
+  --     +--|-----------------------------+                    |
+  --        |                                                  |
+  --        +--------------------------------------------------+
+  --
+  -- where worker 1 is still processing work item A, and worker 2 has just finished
+  -- processing work items B and C.
+  -- Now worker 2 is idle, pops element D as the next work item from the `inVar`,
+  -- and enqueues enqueues MVar `worker2OutVarSlot_b` into `outQueue`,
+  -- processes element D, and runs `putMVar worker2OutVarSlot_b (f D)`;
+  -- it is at this time that worker 2 blocks until `worker2OutVarSlot_b`
+  -- is emptied when the conduit `yield`s the result.
+  -- Thus we have this situation:
+  --
+  --  +-----------------------------------+
+  --  |                                   |
+  --  V                                   |
+  -- -------------------------  [ worker1OutVarSlot_a  worker1OutVarSlot_a ] <- f   \
+  --  A  B  C  D                                                                     - inVar
+  -- -------------------------  [ worker2OutVarSlot_b  worker2OutVarSlot_b ] <- f   /
+  --     ^  ^  ^                          |  |                 |
+  --     +--|--|--------------------------+  |                 |
+  --        |  |                             |                 |
+  --        +--|-----------------------------|-----------------+
+  --           |                             |
+  --           +-----------------------------+
+  --
+  -- It is thus NOT an invariant that every `outVar` is in the `outQueue` only once.
+  --
+  -- TODO: This whole design has producing the "+ 1" logic has a bit of an ugliness
+  --       in that it's not possible to make each worker use at max 1 `b`; only
+  --       2 or more `b`s are possible.
+  --       The whole design might be simplified by changing it so that instead
+  --       of each worker having a fixed number of `workerOutVar`s,
+  --       workers make up new `workerOutVar`s on demand (enqueuing them
+  --       into `outQueue` as before), and the conduit keeping track of
+  --       how many work items are between `inVar` and being yielded
+  --       (this is currently `numInQueue`), and ensuring that this number
+  --       is < than some maximum number M (blocking on `takeMVar` of the
+  --       front MVar in `outQueue` when the M limit is reached).
   inVar         :: MVar (Maybe a)       <- newEmptyMVar
   inVarEnqueued :: MVar ()              <- newEmptyMVar
   outQueueRef   :: IORef (Seq (MVar b)) <- newIORef Seq.empty
@@ -236,8 +297,10 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
       -- 2) Cruise phase,
       --      during which we always have at least `numWorkersRampedUp` many
       --      `workerOutVar`s in the output queue (this is an invariant).
-      --      At all times `numInQueue` keeps track of how many `workerOutVar`s
-      --      are in the output queue.
+      --      At all times `numInQueue` keeps track of how many work units
+      --      are under processing (that is, are after being read off the `inVar`
+      --      and before being read off an `outVar`;
+      --      so <= `N * (workerOutputBufferSize + 1)` many).
       --      Cruise phase doesn't happen if the conduit terminates before
       --      `numThreads` elements are awaited.
       -- 3) Drain phase,
