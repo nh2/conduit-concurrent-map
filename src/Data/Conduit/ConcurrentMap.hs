@@ -127,7 +127,7 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
   -- -------------------------  [ workerOutVar(N-1)a  workerOutVar(N-1)b  ... ] <- f   /
   --                            [ workerOutVar(N  )a  workerOutVar(N  )b  ... ] <- f  /
   --                                                                                      o <- button to signal
-  --                                                                                           inVarInqueued
+  --                                                                                           inVarEnqueued
   --
   -- Any worker that's not busy is hanging onto `inVar`, grabbing
   -- its contents as soon as `inVar` is filled.
@@ -250,7 +250,7 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
           loop numWorkersRampedUp numInQueue = do
 
             await >>= \case
-              Nothing -> do -- upstream conduit is done, tell all workers to finish
+              Nothing -> do -- Drain phase: Upstream conduit is done, tell all workers to finish.
                 for_ [1..numWorkersRampedUp] $ \_ -> do
                   putInVar Nothing
                   yieldQueueHead -- This will succeed due to the "Cruise phase invariant", see above.
