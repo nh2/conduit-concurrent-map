@@ -8,6 +8,7 @@ import           Control.Monad.IO.Class (liftIO)
 import           Data.Conduit
 import qualified Data.Conduit.Combinators as CC
 import qualified Data.Conduit.List as CL
+import           Data.Foldable (for_)
 import           Test.Hspec
 import           Test.QuickCheck
 import           Test.QuickCheck.Monadic (monadicIO, run, pick, assert)
@@ -71,6 +72,20 @@ main = hspec $ do
         .| CL.consume
 
       l `shouldBe` [2,4,6,8,10,12]
+
+    it "does not hang when 3 elements are processed by the same thread in order" $ do
+      for_ [(1::Int)..100] $ \t -> do -- try many times due to timing
+        sayString ("Test " ++ show t)
+        l <- runConduitRes $
+             CL.sourceList [1,   0,0,0,   0,0,0,   0,0,0]
+          .| concurrentMapM_ 4 2
+               (\i -> liftIO $ do
+                  threadDelay (i * 1000)
+                  return (i*2)
+               )
+          .| CL.consume
+
+        l `shouldBe` [2,0,0,0,0,0,0,0,0,0]
 
   describe "concurrentMapM_" $ do
     it "is like mapM" $ prop_concurrentMapM_is_like_mapM
