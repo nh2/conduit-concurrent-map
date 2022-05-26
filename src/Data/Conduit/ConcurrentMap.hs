@@ -341,8 +341,20 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
                     -- Cruise phase:
 
                     putInVar (Just a) >> waitForSignal inVarEnqueued
+                    -- `waitForSignal` will not block forever because at least the worker
+                    -- in the head of `outQueue` will always be able to take the value:
+                    -- Either:
+                    -- 1. it is currently running `f`, in which case its `workerOutVar`
+                    --    is empty, it will eventually write the `b` into it, and then
+                    --    be ready to take the `inVar`.
+                    -- 2. or it has already done that and is currently doing `takeMVar invar`
+                    --
                     -- At the time `waitForSignal inVarEnqueued` completes, we know
                     -- that there is a `workerOutVar` in the `outQueue` we can wait for.
+                    --
+                    -- If it was indeed the `workerOutVar` of the head worker,
+                    -- Then we will take that `workerOutVar` below below, to restoring
+                    -- the above invariant for the next head worker.
 
                     let numInQueueAfterEnqueued = numInQueue + 1
 
