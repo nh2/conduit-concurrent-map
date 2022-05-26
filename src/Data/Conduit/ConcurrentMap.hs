@@ -308,24 +308,18 @@ concurrentMapM_ numThreads workerOutputBufferSize f = do
       --      Cruise phase doesn't happen if the conduit terminates before
       --      `numThreads` elements are awaited.
       -- 3) Drain phase,
-      --      in which we drain off the `numWorkersRampedUp` elements that we
-      --      know must be in the queue (due to above invariant),
-      --      drain off all elements stored in output buffers,
+      --      in which we drain off the `numInQueue` elements in the queue,
       --      send all workers the stop signal and wait for their orderly termination.
 
       let loop :: Int -> Int -> ConduitT a b m ()
           loop numWorkersRampedUp numInQueue = do
 
             await >>= \case
-              Nothing -> do -- Drain phase: Upstream conduit is done, tell all workers to finish.
-                for_ [1..numWorkersRampedUp] $ \_ -> do
-                  yieldQueueHead -- This will succeed due to the "Cruise phase invariant", see above.
-                  putInVar Nothing -- This will not block forever because we just freed an `outVar` in the line above.
-                for_ [1..(numThreads - numWorkersRampedUp)] $ \_ -> do -- need to quit workers that were never ramped up too
-                  putInVar Nothing
-                let numInQueueAfterStopping = numInQueue - numWorkersRampedUp
-                for_ [1..numInQueueAfterStopping] $ \_ -> do
-                  yieldQueueHead
+              Nothing -> do -- Drain phase: Upstream conduit is done.
+                for_ [1..numInQueue] $ \_ -> do
+                  yieldQueueHead -- Drain the queue.
+                for_ [1..numThreads] $ \_ -> do
+                  putInVar Nothing -- tell all workers to finish.
                 wait workersAsync -- wait for workers to shut down
 
               Just a
