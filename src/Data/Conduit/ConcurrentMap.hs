@@ -96,9 +96,16 @@ seqHeadMaybe s = case Seq.viewl s of
 --   doesn't change the order).
 -- * Bounded memory: The conduit will only hold to
 --   @numThreads * (workerOutputBufferSize + 1)@ as many @b@s.
--- * Full utilisation: The conduit will try to keep all cores busy as much as
---   it can. This means that it will always try to `await` if there's a free
---   core, and will only `yield` once it has to to make a core free.
+-- * High utilisation: The conduit will try to keep all cores busy as much as
+--   it can. This means that after `await`ing an input, it will only block
+--   to wait for an output from a worker thread if it has to because
+--   we're at the `workerOutputBufferSize` output buffer bound of `b` elements.
+--   (It may, however, `yield` even if the queue is not full.
+--   Since `yield` will block the conduit's thread until downstream
+--   conduits in the pipeline `await`, utilisation will be poor if other
+--   conduits in the pipeline have low throughput.
+--   This makes sense because a conduit pipeline's total throughput
+--   is bottlenecked by the segment in the pipeline.)
 --   It also ensures that any worker running for longer than others does not
 --   prevent other free workers from starting new work, except from when
 --   we're at the `workerOutputBufferSize` output buffer bound of `b` elements.
