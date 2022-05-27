@@ -1,3 +1,8 @@
+0.1.3
+-----
+
+* Properly fix race condition that wasn't actually fixed in the previous release.
+
 0.1.2
 -----
 
