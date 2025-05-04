@@ -5,7 +5,8 @@
 -- | Functions for concurrent mapping over Conduits.
 module Data.Conduit.ConcurrentMap
   ( -- * Explicit number of threads
-    concurrentMapM_
+    concurrentMapM
+  , concurrentMapM_
     -- * CPU-bound use case
   , concurrentMapM_numCaps
   ) where
@@ -45,7 +46,12 @@ seqHeadMaybe s = case Seq.viewl s of
   a :< _     -> Just a
 
 
--- | @concurrentMapM_ numThreads workerOutputBufferSize f@
+-- See #1
+concurrentMapM_ :: (MonadUnliftIO m, MonadResource m) => Int -> Int -> (a -> m b) -> ConduitT a b m ()
+concurrentMapM_ = concurrentMapM
+{-# DEPRECATED concurrentMapM_ "Use concurrentMapM (without _), as this function yields b; in the future, this function may be replaced by one that does not yield b" #-}
+
+-- | @concurrentMapM numThreads workerOutputBufferSize f@
 --
 -- Concurrent, order-preserving conduit mapping function.
 --
@@ -119,8 +125,8 @@ seqHeadMaybe s = case Seq.viewl s of
 -- > puts :: (MonadIO m) => String -> m () -- for non-interleaved output
 -- > puts s = liftIO $ BS8.putStrLn (BS8.pack s)
 -- > runConduitRes (CL.sourceList [1..6] .| concurrentMapM_ 4 (\i -> liftIO $ puts (show i ++ " before") >> threadDelay (i * 1000000) >> puts (show i ++ " after") >> return (i*2)) .| CL.consume )
-concurrentMapM_ :: (MonadUnliftIO m, MonadResource m) => Int -> Int -> (a -> m b) -> ConduitT a b m ()
-concurrentMapM_ numThreads workerOutputBufferSize f = do
+concurrentMapM :: (MonadUnliftIO m, MonadResource m) => Int -> Int -> (a -> m b) -> ConduitT a b m ()
+concurrentMapM numThreads workerOutputBufferSize f = do
   when (workerOutputBufferSize < 1) $ do
     error $ "Data.Conduit.Concurrent.concurrentMapM_ requires workerOutputBufferSize < 1, got " ++ show workerOutputBufferSize
 
